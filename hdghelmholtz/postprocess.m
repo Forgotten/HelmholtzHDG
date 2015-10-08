@@ -34,6 +34,7 @@ for i=1:ne
     xet = squeeze(master.shap(:,3,:))'*squeeze(dg(:,1));
     yxi = squeeze(master.shap(:,2,:))'*squeeze(dg(:,2));
     yet = squeeze(master.shap(:,3,:))'*squeeze(dg(:,2));
+    % getting the Jacobian
     jac = xxi.*yet - xet.*yxi;
     
     xxi1 = squeeze(master1.shap(:,2,:))'*squeeze(dg1(:,1));

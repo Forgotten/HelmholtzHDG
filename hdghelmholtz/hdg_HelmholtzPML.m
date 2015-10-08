@@ -1,4 +1,5 @@
-function [u,q,uhat] = hdg_Helmholtz(master, mesh,m, omega, tau)
+function [u,q,uhat] = hdg_HelmholtzPML(master, mesh,m, omega, tau, lambda, ...
+                                        sigmaMax)
 %HDG_Helmholtz Solves the Helmholtz problem using HDG
 %
 %   [u,q,uhat] = HDG_POI(MASTER,MESH,kappa, tau)
@@ -8,7 +9,11 @@ function [u,q,uhat] = hdg_Helmholtz(master, mesh,m, omega, tau)
 %      m:            Squared slowness 1/c^2(x)
 %      omega:        Frequency
 %      tau:          Stabilization parameter
-%
+%      lambda:       Width of the pml (we suppose a squared computational
+%      domain 
+%      sigmaMax:     Maximum absorbtion 
+
+
 
 
 nt  = size(mesh.t,1);
@@ -18,9 +23,25 @@ npv = size(mesh.dgnodes,1);
 % number of points in the interface
 nps = size(master.ploc1d,1);
 
+dgnodes = mesh.dgnodes;
+xmax = max(max(squeeze(dgnodes(:,1,:))));
+xmin = min(min(squeeze(dgnodes(:,1,:))));
+ymax = max(max(squeeze(dgnodes(:,2,:))));
+ymin = min(min(squeeze(dgnodes(:,2,:))));
+
+sigmaPML_x = @(x)sigmaMax*( (x-xmin-lambda).^2.*(x < xmin + lambda) + ...
+                (x-(xmax-lambda)).^2.*(x > xmax - lambda))/lambda^2; 
+sigmaPML_y = @(y) sigmaMax*( (y-ymin-lambda).^2.*(y < ymin + lambda) ...
+                + (y-(ymax-lambda)).^2.*(y > ymax - lambda))/lambda^2;
+s_x = @(x,y) 1./(1+1i*sigmaPML_x(x)/omega);
+s_y = @(x,y) 1./(1+1i*sigmaPML_y(y)/omega);
+
 % extracting information for the master node
+% values at the dg nodes of the shape functions
 shap = squeeze(master.shap(:,1,:));
+% values of the derivatives with respect to xi
 shapxi = squeeze(master.shap(:,2,:))*diag(master.gwgh);
+% values of the derivatives with respect to eta
 shapet = squeeze(master.shap(:,3,:))*diag(master.gwgh); 
 sh1d = squeeze(master.sh1d(:,1,:));
 perm = master.perm;
@@ -43,28 +64,44 @@ L = zeros(3*npv,nt);
 
 % TODO modify this thing in order to use sparse (cols, rows, values)
 for i = 1:nt % loop over each element
+    % computing the derivatives of (x,y) with respect to (xi, eta)
+    % computing the Jacobian matrix for the change of variables
     xxi = squeeze(master.shap(:,2,:))'*squeeze(mesh.dgnodes(:,1,i));
     xet = squeeze(master.shap(:,3,:))'*squeeze(mesh.dgnodes(:,1,i));
     yxi = squeeze(master.shap(:,2,:))'*squeeze(mesh.dgnodes(:,2,i));
     yet = squeeze(master.shap(:,3,:))'*squeeze(mesh.dgnodes(:,2,i));
-    % computing the Jacobian of the transformation
+    % computing the determinant of Jacobian of the transformation
     jac = xxi.*yet - xet.*yxi;
     % derivative in x of the shape functions
+    % we use tha chain rule
+    % \partial_x \phi_i = \partial_xi  \phi \partial_x xi + 
+    %                     \partial_eta \phi \partial_x eta 
     shapx =   shapxi*diag(yet) - shapet*diag(yxi);
-    % derivatives in y of the shape functions
+    % derivatives in y of the shape functions using the same for y
     shapy = - shapxi*diag(xet) + shapet*diag(xxi);
+    % the indices of this matrices are given by (I think)
+    % shapx_{i,j} = \partial_x \phi_i(x_j)
+    
+      
     
     %computing the local Mass matrix
     Mass  = shap*diag(master.gwgh.*jac)*shap';
     
-    % form A_K
+    % we extract the coordinated of the dg nodes
+    xg = squeeze(master.shap(:,1,:))'*mesh.dgnodes(:,:,i);
     
-    % \int_{E} \phi_i * \phi_j
-    A_K(1:npv,1:npv) = Mass;
-    A_K((npv+1):2*npv,(npv+1):2*npv) = Mass;
+    % evaluating S_x and S_y at the dgnodes
+    s_x_dgnodes = s_x(xg(:,1),xg(:,2));
+    s_y_dgnodes = s_y(xg(:,1),xg(:,2));
     
-    % we need to add a function handle to evaluate kappa
-    % or omega*m
+    Mass_x = shap*diag(master.gwgh.*jac.*(1./s_x_dgnodes))*shap';
+    Mass_y = shap*diag(master.gwgh.*jac.*(1./s_y_dgnodes))*shap';
+    
+    % We start building the differential operators in Matrix form
+    % form A_K 
+    % \int_{E} Q \phi_i * \phi_j
+    A_K(1:npv,1:npv) = Mass_x;
+    A_K((npv+1):2*npv,(npv+1):2*npv) = Mass_y;
     
     % form B_K
     %\int_{E} \partial_x \phi_i * \phi_j
@@ -74,15 +111,16 @@ for i = 1:nt % loop over each element
     
     % this is the source term 
     % form F_K
-    % we extract the coordinated of the dg nodes
-    xg = squeeze(master.shap(:,1,:))'*mesh.dgnodes(:,:,i);
     % evaluate the source at the Dg nodes
     fg = source(xg(:,1),xg(:,2));
     % projection into the DG space by integration
     % \int_{E} s(x,y) * \phi_j(x,y) dxdy
     F_K = shap*(master.gwgh.*jac.*fg);
     
+    % we evaluate the slowness squared
     slowness_sqd = m(xg(:,1),xg(:,2));
+    
+    
     
     % allocate memory for the elemental matrices
     C_K = zeros(2*npv,3*nps);
