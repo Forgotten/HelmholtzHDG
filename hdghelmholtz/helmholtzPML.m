@@ -1,9 +1,9 @@
 %DRIVER FOR THE POISSON PROBLEM 
 
-porder = 6;
-n      = 50;
+porder = 4;
+n      = 60;
 omega  = 2*pi*30.2;
-tau    = 1;
+tau    = 1/(porder*omega);
 
 mesh = mkmesh_square(n,n,porder);
 master = mkmaster(mesh,2*porder);
@@ -12,7 +12,8 @@ master = mkmaster(mesh,2*porder);
 c = @(x,y) .125*sin(8*pi*x) + .125*sin(12*pi*y) +1;
 m = @(x,y) 1./(c(x,y).^2);
 
-[u,q,uhat] = hdg_HelmholtzPML(master, mesh, m, omega, 1/(porder*omega), 0.1, 500);
+[u,q,uhat,H] = hdg_HelmholtzPML(master, mesh, m, omega, tau, 0.1, 500);
+
 
 %% post processing (not valid for variable density)
 

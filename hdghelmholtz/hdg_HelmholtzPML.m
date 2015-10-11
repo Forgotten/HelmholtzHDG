@@ -1,8 +1,8 @@
-function [u,q,uhat] = hdg_HelmholtzPML(master, mesh,m, omega, tau, lambda, ...
+function [u,q,uhat,H] = hdg_HelmholtzPML(master, mesh,m, omega, tau, lambda, ...
                                         sigmaMax)
 %HDG_Helmholtz Solves the Helmholtz problem using HDG
 %
-%   [u,q,uhat] = HDG_POI(MASTER,MESH,kappa, tau)
+%   [u,q,uhat,H] = HDG_POI(MASTER,MESH,kappa, tau) 
 %
 %      MASTER:       Master structure
 %      MESH:         Mesh structure
@@ -12,6 +12,7 @@ function [u,q,uhat] = hdg_HelmholtzPML(master, mesh,m, omega, tau, lambda, ...
 %      lambda:       Width of the pml (we suppose a squared computational
 %      domain 
 %      sigmaMax:     Maximum absorbtion 
+%      we output H the HDG matrix to study it's sparsity pattern
 
 
 
@@ -33,8 +34,10 @@ sigmaPML_x = @(x)sigmaMax*( (x-xmin-lambda).^2.*(x < xmin + lambda) + ...
                 (x-(xmax-lambda)).^2.*(x > xmax - lambda))/lambda^2; 
 sigmaPML_y = @(y) sigmaMax*( (y-ymin-lambda).^2.*(y < ymin + lambda) ...
                 + (y-(ymax-lambda)).^2.*(y > ymax - lambda))/lambda^2;
-s_x = @(x,y) 1./(1+1i*sigmaPML_x(x)/omega);
-s_y = @(x,y) 1./(1+1i*sigmaPML_y(y)/omega);
+s_x = @(x,y) (1+1i*sigmaPML_y(y)/omega)./(1+1i*sigmaPML_x(x)/omega);
+s_y = @(x,y) (1+1i*sigmaPML_x(x)/omega)./(1+1i*sigmaPML_y(y)/omega);
+
+s_xy = @(x,y) ((1+1i*sigmaPML_x(x)/omega).*(1+1i*sigmaPML_y(y)/omega));
 
 % extracting information for the master node
 % values at the dg nodes of the shape functions
@@ -162,7 +165,8 @@ for i = 1:nt % loop over each element
         M_K(J,J) = M_K(J,J) + tmp;        
     end
     
-    slowness_Mass = shap*diag(master.gwgh.*jac.*slowness_sqd)*shap';
+    s_xy_dgnodes = s_xy(xg(:,1),xg(:,2));
+    slowness_Mass = shap*diag(master.gwgh.*jac.*slowness_sqd.*s_xy_dgnodes)*shap';
     
     % \lbracket \tau u_h, w \rbracket - \omega^2 m (u_h, w)
     D_K = D_K - omega.^2*slowness_Mass; 
