@@ -2,7 +2,7 @@ function [u,q,uhat,H,R] = hdg_HelmholtzPML(master, mesh,m, omega, tau, lambda, .
                                         sigmaMax)
 %HDG_Helmholtz Solves the Helmholtz problem using HDG
 %
-%   [u,q,uhat,H,R] = HDG_POI(MASTER,MESH,kappa, tau) 
+%   [u,q,uhat,H,R] = hdg_HelmholtzPML(MASTER,MESH,kappa, tau) 
 %
 %      MASTER:       Master structure
 %      MESH:         Mesh structure
@@ -17,20 +17,24 @@ function [u,q,uhat,H,R] = hdg_HelmholtzPML(master, mesh,m, omega, tau, lambda, .
 
 
 
-
+% number of trianges
 nt  = size(mesh.t,1);
+% number of faces
 nf  = size(mesh.f,1);
+
 % number of points in the volume
 npv = size(mesh.dgnodes,1);
 % number of points in the interface
 nps = size(master.ploc1d,1);
 
+% we extract geoemtrical information from the dg nodes
 dgnodes = mesh.dgnodes;
 xmax = max(max(squeeze(dgnodes(:,1,:))));
 xmin = min(min(squeeze(dgnodes(:,1,:))));
 ymax = max(max(squeeze(dgnodes(:,2,:))));
 ymin = min(min(squeeze(dgnodes(:,2,:))));
 
+% we define the PML profiles
 sigmaPML_x = @(x)sigmaMax*( (x-xmin-lambda).^2.*(x < xmin + lambda) + ...
                 (x-(xmax-lambda)).^2.*(x > xmax - lambda))/lambda^2; 
 sigmaPML_y = @(y) sigmaMax*( (y-ymin-lambda).^2.*(y < ymin + lambda) ...
@@ -41,6 +45,7 @@ s_y = @(x,y) (1+1i*sigmaPML_x(x)/omega)./(1+1i*sigmaPML_y(y)/omega);
 s_xy = @(x,y) ((1+1i*sigmaPML_x(x)/omega).*(1+1i*sigmaPML_y(y)/omega));
 
 % extracting information for the master node
+
 % values at the dg nodes of the shape functions
 shap = squeeze(master.shap(:,1,:));
 % values of the derivatives with respect to xi
@@ -65,10 +70,18 @@ R = sparse(nf*nps,1);
 P = zeros(3*npv,3*nps,nt);
 L = zeros(3*npv,nt);
 
+% We define the row, column, and value vectors 
+colIndH = [];
+rowIndH = [];
+valH = [];
+% and for the right hand side too
+rowIndR = [];
+valR = [];
 
 % TODO modify this thing in order to use sparse (cols, rows, values)
 for i = 1:nt % loop over each element
-    % computing the derivatives of (x,y) with respect to (xi, eta)
+    % computing the derivatives of (x,y) the physical coordinates 
+    % with respect to the reference coordinates (xi, eta)
     % computing the Jacobian matrix for the change of variables
     xxi = squeeze(master.shap(:,2,:))'*squeeze(mesh.dgnodes(:,1,i));
     xet = squeeze(master.shap(:,3,:))'*squeeze(mesh.dgnodes(:,1,i));
@@ -86,10 +99,7 @@ for i = 1:nt % loop over each element
     % the indices of this matrices are given by (I think)
     % shapx_{i,j} = \partial_x \phi_i(x_j)
     
-      
-    
-    %computing the local Mass matrix
-    Mass  = shap*diag(master.gwgh.*jac)*shap';
+ 
     
     % we extract the coordinated of the dg nodes
     xg = squeeze(master.shap(:,1,:))'*mesh.dgnodes(:,:,i);
@@ -98,12 +108,14 @@ for i = 1:nt % loop over each element
     s_x_dgnodes = s_x(xg(:,1),xg(:,2));
     s_y_dgnodes = s_y(xg(:,1),xg(:,2));
     
+    % computing the mass matrices, with the PML weights 
     Mass_x = shap*diag(master.gwgh.*jac.*(1./s_x_dgnodes))*shap';
     Mass_y = shap*diag(master.gwgh.*jac.*(1./s_y_dgnodes))*shap';
     
     % We start building the differential operators in Matrix form
     % form A_K 
     % \int_{E} Q \phi_i * \phi_j
+    % where Q are the PML profile
     A_K(1:npv,1:npv) = Mass_x;
     A_K((npv+1):2*npv,(npv+1):2*npv) = Mass_y;
     
@@ -123,10 +135,9 @@ for i = 1:nt % loop over each element
     
     % we evaluate the slowness squared
     slowness_sqd = m(xg(:,1),xg(:,2));
-    
-    
-    
+        
     % allocate memory for the elemental matrices
+    % shall we allocate them outside the foor loop? 
     C_K = zeros(2*npv,3*nps);
     D_K = zeros(npv,npv);
     E_K = zeros(npv,3*nps);
@@ -188,12 +199,25 @@ for i = 1:nt % loop over each element
     % into the global matrix and vector
     imap = elcon(:,i);
     % extremely inefficient (we need to to do this with a proper list)
-    H(imap,imap) = H(imap,imap) + H_K;
-    R(imap) = R(imap) + R_K;
+    
+    % we build the matrix in index form. 
+    indicesi = repmat(imap, [1, length(imap)]);
+    indicesj = repmat(imap.', [length(imap), 1]);
+    % we  may need to preallocate the column and row indexes
+    colIndH = [colIndH; indicesj(:)];
+    rowIndH = [rowIndH; indicesi(:)];
+    valH    = [valH;    H_K(:)];
+    rowIndR = [rowIndR; imap(:)];
+    valR    = [valR;    R_K(:)];
+    
 end
 
+% assembling the matrix 
+H = sparse(rowIndH,colIndH,valH);
+R = full(sparse(rowIndR, ones(size(rowIndR,1),1), valR));
 % Imposing Homogenous Dirichelt Boundary conditions
 % remove rows and columns corresponding to the boundary nodes
+
 m = nf - length(find(mesh.f(:,4)<0));
 ind = m*nps+1:nf*nps;  
 H(ind,:) = [];

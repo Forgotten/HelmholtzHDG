@@ -2,11 +2,11 @@ function mesh = mkmesh_square(m,n,porder,parity)
 %MKMESH_SQUARE Creates 2D mesh data structure for unit square.
 %   MESH=MKMESH_SQUARE(M,N,PORDER,PARITY)
 %
-%      MESH:      Mesh structure
-%      M:         Number of points in the horizaontal direction 
-%      N:         Number of points in the vertical direction
-%      PORDER:    Polynomial Order of Approximation (default=1)
-%      PARITY:    Flag determining the the triangular pattern
+%      mesh:      Mesh structure
+%      m:         Number of points in the horizaontal direction 
+%      n:         Number of points in the vertical direction
+%      porder:    Polynomial Order of Approximation (default=1)
+%      parity:    Flag determining the the triangular pattern
 %                 Flag = 0 (diagonals SW - NE) (default)
 %                 Flag = 1 (diagonals NW - SE)
 %
@@ -15,7 +15,6 @@ function mesh = mkmesh_square(m,n,porder,parity)
 %     NT:        Number of triangles
 %     P:         Node positions (NP,2)
 %     T:         Triangle indices (NT,3)
-%   See also: SQUAREMESH, MKT2F, SETBNDNBRS, UNIFORMLOCALPNTS, CREATENODES
 %
 
 if nargin<2, m=2; n=2; end

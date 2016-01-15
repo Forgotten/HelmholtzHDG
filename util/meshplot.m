@@ -13,8 +13,8 @@ if nargin<2 | isempty(opts), opts=[0]; end
 if length(opts)<2, opts=[opts,0]; end
 if length(opts)<3, opts=[opts,0]; end
 
-p=mesh.p;
-t=mesh.t;
+p = mesh.p;
+t = mesh.t;
 
 hh=[];
 pars={'facecolor',[.8,1,.8],'edgecolor','k','Linew',1};
