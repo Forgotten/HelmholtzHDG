@@ -1,8 +1,8 @@
-function [u,q,uhat,H] = hdg_HelmholtzPML(master, mesh,m, omega, tau, lambda, ...
+function [u,q,uhat,H,R] = hdg_HelmholtzPML(master, mesh,m, omega, tau, lambda, ...
                                         sigmaMax)
 %HDG_Helmholtz Solves the Helmholtz problem using HDG
 %
-%   [u,q,uhat,H] = HDG_POI(MASTER,MESH,kappa, tau) 
+%   [u,q,uhat,H,R] = HDG_POI(MASTER,MESH,kappa, tau) 
 %
 %      MASTER:       Master structure
 %      MESH:         Mesh structure
@@ -12,7 +12,8 @@ function [u,q,uhat,H] = hdg_HelmholtzPML(master, mesh,m, omega, tau, lambda, ...
 %      lambda:       Width of the pml (we suppose a squared computational
 %      domain 
 %      sigmaMax:     Maximum absorbtion 
-%      we output H the HDG matrix to study it's sparsity pattern
+%      we output H the HDG matrix to study it's sparsity pattern and the
+%      right hand side R
 
 
 
@@ -201,6 +202,7 @@ R(ind) = [];
         
 % solve for uhat
 uhat = H\R;
+% we add the homegeneous Dirichlet boundary conditions
 uhat = [uhat; zeros(length(ind),1)];
 
 % compute u and q

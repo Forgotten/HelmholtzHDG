@@ -2,6 +2,8 @@ function elcon = elconnectivities(nps,t2f)
 % computed the element connectivities
 %  nps: number of points in the edges of the elements
 %  t2f triangle to faces matrix
+
+% number of elements
 ne  = size(t2f,1);
 
 elcon = zeros(3*nps,ne);                % Element Connectivities
